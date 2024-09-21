@@ -1,0 +1,299 @@
+Voici un backup complet incluant les codes et instructions détaillées :
+
+---
+
+# Backup du projet Combine Audio
+
+## Contexte du projet
+Le projet **Combine Audio** consiste en un script bash permettant de combiner plusieurs périphériques audio (haut-parleurs et micros) sur un système Linux utilisant PulseAudio ou PipeWire. L'objectif est de permettre aux utilisateurs de gérer facilement leurs périphériques audio via une interface en ligne de commande.
+
+## Fonctionnalités mises en place
+1. **Gestion des périphériques combinés :**
+   - **Création de périphériques combinés :** Permet aux utilisateurs de combiner plusieurs haut-parleurs ou micros en un seul périphérique.
+   - **Suppression de périphériques combinés :** Permet aux utilisateurs de supprimer les périphériques combinés existants.
+
+2. **Interface utilisateur :**
+   - Utilisation de `dialog` pour créer une interface utilisateur simple.
+   - Notifications via `notify-send` pour informer l'utilisateur des actions effectuées.
+
+3. **Journalisation :**
+   - Journalisation des actions dans un fichier de log (`/var/log/combine_audio.log`).
+
+4. **Gestion des erreurs :**
+   - Vérification de l'état de PulseAudio ou PipeWire avant d'exécuter des commandes.
+
+## Code complet de la version en développement
+```bash
+#!/bin/bash
+
+# Chemin du fichier de log
+log_file="/var/log/combine_audio.log"
+# Chemin pour stocker les profils audio, distinct pour chaque utilisateur
+profiles_file="$HOME/.combine_audio_profiles"
+
+# Fonction pour journaliser les actions
+log_action() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> $log_file
+}
+
+# Vérifier si PulseAudio est actif
+check_pulseaudio() {
+    if ! pactl info > /dev/null 2>&1; then
+        dialog --msgbox "PulseAudio n'est pas actif. Veuillez le démarrer avant de continuer." 10 40
+        exit 1
+    fi
+}
+
+# Fonction pour envoyer une notification
+notify_user() {
+    notify-send "Combine Audio" "$1"
+}
+
+# Fonction pour lister les périphériques audio disponibles (haut-parleurs)
+get_audio_sinks() {
+    pactl list short sinks | sort
+}
+
+# Fonction pour lister les périphériques audio disponibles (micros)
+get_audio_sources() {
+    pactl list short sources | sort
+}
+
+# Fonction pour créer un périphérique combiné (haut-parleurs)
+create_combined() {
+    sinks=$(get_audio_sinks)
+    sink_options=()
+
+    while read -r line; do
+        index=$(echo "$line" | awk '{print $1}')
+        name=$(echo "$line" | awk '{print $2}')
+        sink_options+=("$index" "$name" "off")
+    done <<< "$sinks"
+
+    choices=$(dialog --checklist "Sélectionnez les haut-parleurs à combiner (ESPACE pour sélectionner)" 15 60 8 "${sink_options[@]}" 2>&1 >/dev/tty)
+
+    if [ -z "$choices" ]; then
+        dialog --msgbox "Aucun périphérique sélectionné. Annulation." 10 40
+        clear
+        return
+    fi
+
+    selected_sinks=()
+    for choice in $choices; do
+        sink=$(echo "$sinks" | awk -v id="$choice" '{if ($1 == id) print $2}')
+        selected_sinks+=("$sink")
+    done
+
+    if [ ${#selected_sinks[@]} -lt 2 ]; then
+        dialog --msgbox "Vous devez sélectionner au moins deux haut-parleurs." 10 40
+        clear
+        return
+    fi
+
+    while true; do
+        combined_name=$(dialog --inputbox "Entrez un nom pour le périphérique combiné (par défaut: 'combined')" 10 40 2>&1 >/dev/tty)
+        if [ -z "$combined_name" ]; then
+            combined_name="combined"
+        fi
+
+        if pactl list modules | grep "$combined_name" > /dev/null; then
+            dialog --msgbox "Erreur : un périphérique combiné avec ce nom existe déjà. Réessayez." 10 40
+        else
+            break
+        fi
+    done
+
+    combined_sinks=$(IFS=, ; echo "${selected_sinks[*]}")
+
+    pactl load-module module-combine-sink sink_name=$combined_name slaves=$combined_sinks
+
+    log_action "Périphérique combiné créé : $combined_name avec ${combined_sinks[*]}"
+    notify_user "Périphérique combiné créé : $combined_name"
+    dialog --msgbox "Périphérique combiné '$combined_name' créé avec succès." 10 40
+}
+
+# Fonction pour créer un périphérique combiné (micros)
+create_combined_mic() {
+    sources=$(get_audio_sources)
+    source_options=()
+
+    while read -r line; do
+        index=$(echo "$line" | awk '{print $1}')
+        name=$(echo "$line" | awk '{print $2}')
+        source_options+=("$index" "$name" "off")
+    done <<< "$sources"
+
+    choices=$(dialog --checklist "Sélectionnez les micros à combiner (ESPACE pour sélectionner)" 15 60 8 "${source_options[@]}" 2>&1 >/dev/tty)
+
+    if [ -z "$choices" ]; then
+        dialog --msgbox "Aucun micro sélectionné. Annulation." 10 40
+        clear
+        return
+    fi
+
+    selected_sources=()
+    for choice in $choices; do
+        source=$(echo "$sources" | awk -v id="$choice" '{if ($1 == id) print $2}')
+        selected_sources+=("$source")
+    done
+
+    if [ ${#selected_sources[@]} -lt 2 ]; then
+        dialog --msgbox "Vous devez sélectionner au moins deux micros." 10 40
+        clear
+        return
+    fi
+
+    while true; do
+        combined_name=$(dialog --inputbox "Entrez un nom pour le périphérique combiné de micros (par défaut: 'combined_mic')" 10 40 2>&1 >/dev/tty)
+        if [ -z "$combined_name" ]; then
+            combined_name="combined_mic"
+        fi
+
+        if pactl list modules | grep "$combined_name" > /dev/null; then
+            dialog --msgbox "Erreur : un périphérique combiné avec ce nom existe déjà. Réessayez." 10 40
+        else
+            break
+        fi
+    done
+
+    combined_sources=$(IFS=, ; echo "${selected_sources[*]}")
+
+    pactl load-module module-combine-source source_name=$combined_name slaves=$combined_sources
+
+    log_action "Micro combiné créé : $combined_name avec ${combined_sources[*]}"
+    notify_user "Micro combiné créé : $combined_name"
+    dialog --msgbox "Micro combiné '$combined_name' créé avec succès." 10 40
+}
+
+# Fonction pour supprimer un périphérique combiné (haut-parleurs)
+purge_combined() {
+    combined_sinks=$(pactl list short modules | grep -oP 'module-combine-sink.*sink_name=\K\S+')
+
+    if [ -z "$combined_sinks" ]; then
+        dialog --msgbox "Aucun périphérique combiné trouvé." 10 40
+        clear
+        return
+    fi
+
+    combined_list=()
+    while read -r line; do
+        module_id=$(echo "$line" | awk '{print $1}')
+        module_name=$(echo "$line" | grep -oP "(?<=name=)[^,]+")
+        combined_list+=("$module_id" "$module_name")
+    done <<< "$combined_sinks"
+
+    module_to_delete=$(dialog --menu "Sélectionnez le périphérique combiné à supprimer" 15 60 8 "${combined_list[@]}" 2>&1 >/dev/tty)
+
+    if [ -n "$module_to_delete" ]; then
+        pactl unload-module "$module_to_delete"
+        log_action "Périphérique combiné supprimé : $module_to_delete"
+        notify_user "Périphérique combiné supprimé : $module_to_delete"
+        dialog --msgbox "Périphérique combiné supprimé avec succès." 10 40
+    fi
+}
+
+# Fonction pour supprimer un micro combiné
+purge_combined_mic() {
+    combined_sources=$(pactl list short modules | grep "module-combine-source")
+
+    if [ -z "$combined_sources" ]; then
+        dialog --msgbox "Aucun micro combiné trouvé." 10 40
+        clear
+        return
+    fi
+
+    combined_list=()
+    while read -r line; do
+        module_id=$(echo "$line" | awk '{print $2}')  # Récupère l'ID du module
+        module_name=$(echo "$line" | grep -oP "(?<=source_name=)[^ ]+")  # Récupère le nom du micro combiné
+        combined_list+=("$module_id" "$module_name")  # Ajoute à la liste
+    done <<< "$combined_sources"
+
+    if [ ${#combined_list[@]} -eq 0 ]; then
+        dialog --msgbox "Aucun micro combiné trouvé." 10 40
+        return
+    fi
+
+    module_to_delete=$(dialog --menu "Sélectionnez le micro combiné à supprimer" 15 60 8 "${combined_list[@]}" 2>&1 >/dev/tty)
+
+    if [ -n "$module_to_delete" ];
+    then
+        pactl unload-module "$module_to_delete"
+        log_action "Micro combiné supprimé : $module_to_delete"
+        notify_user "Micro combiné supprimé : $module_to_delete"
+        dialog --msgbox "Micro combiné supprimé avec succès." 10 40
+    fi
+}
+
+# Fonction d'aide dynamique complète
+display_help() {
+    dialog --msgbox "Instructions d'utilisation :
+    --------------------------------------------------------
+    1. Créer un périphérique combiné (Haut-parleurs) :
+       Combine plusieurs périphériques de sortie audio 
+       (haut-parleurs) en un seul.
+    --------------------------------------------------------
+    2. Créer un périphérique combiné (Micros) :
+       Combine plusieurs périphériques de capture audio 
+       (micros) en un seul.
+    --------------------------------------------------------
+    3. Supprimer un périphérique combiné :
+       Permet de supprimer un périphérique combiné existant, 
+       qu'il soit micro ou haut-parleurs.
+    --------------------------------------------------------
+    4. Quitter :
+       Sortir du programme." 20 70
+}
+
+# Menu principal
+while true; do
+    action=$(dialog --menu "Gestion des périphériques combinés" 15 60 8 \
+    1 "Créer un nouveau périphérique combiné (Haut-parleurs)" \
+    2 "Supprimer un périphérique combiné (Haut-parleurs)" \
+    3 "Créer un nouveau micro combiné" \
+    4 "Supprimer un micro combiné" \
+    5 "Afficher l'aide" \
+    6 "Quitter" 2>&1 >/dev/tty)
+
+    case $action in
+        1) check_pulseaudio; create_combined ;;
+        2) purge_combined ;;
+        3) check_pulseaudio; create_combined_mic ;;
+        4) purge_combined_mic ;;
+        5) display_help ;;
+        6) clear; exit 0 ;;
+        *) clear; exit 0 ;;
+    esac
+done
+```
+
+## Instructions pour le README
+
+### Combine Audio
+
+**Combine Audio** est un script permettant de combiner plusieurs périphériques audio sur un système Linux utilisant PulseAudio ou PipeWire. Il permet à plusieurs utilisateurs d'entendre le même son dans différents casques ou périphériques audio.
+
+## Prérequis
+
+Avant de commencer, assurez-vous que vous avez installé les dépendances suivantes :
+
+- **PulseAudio** ou **PipeWire** : pour la gestion des périphériques audio.
+- **dialog** : pour afficher des interfaces utilisateur simples en ligne de commande.
+
+### Commandes d'installation des dépendances (Ubuntu) :
+
+```bash
+sudo apt update
+sudo apt install pulseaudio dialog -y  # Pour PulseAudio
+# ou
+sudo apt install pipewire dialog -y  # Pour PipeWire
+```
+
+## Utilisation
+
+1. Lancez le script avec `./combine_audio_enhanced.sh`.
+2. Suivez les instructions à l'écran pour créer ou supprimer des périphériques combinés.
+
+---
+
+Ce document sert de référence pour la suite du projet et devrait permettre à toute personne reprenant le projet de comprendre l'état actuel ainsi que les fonctions mises en place.
