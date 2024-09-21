@@ -109,20 +109,35 @@ purge_combined() {
     fi
 }
 
-# Fonction pour sauvegarder un profil audio
+# Fonction pour sauvegarder un profil avec métadonnées
 save_profile() {
-    combined_name=$(dialog --inputbox "Entrez le nom du profil à sauvegarder" 10 40 2>&1 >/dev/tty)
-    echo "pactl load-module module-combine-sink sink_name=$combined_name" >> "$profiles_file"
-    dialog --msgbox "Profil '$combined_name' sauvegardé avec succès." 10 40
-}
-
-# Fonction pour gérer les profils audio (ajout de la suppression)
-manage_profiles() {
-    if [ ! -f "$profiles_file" ]; then
-        touch "$profiles_file"
+    profile_name=$(dialog --inputbox "Entrez le nom du profil à sauvegarder" 10 40 2>&1 >/dev/tty)
+    if [ -z "$profile_name" ]; then
+        dialog --msgbox "Le nom du profil ne peut pas être vide." 10 40
+        return
     fi
 
-    profiles=$(cat "$profiles_file" | nl)
+    description=$(dialog --inputbox "Entrez une description pour ce profil (facultatif)" 10 40 2>&1 >/dev/tty)
+    profile_file="$HOME/.combine_audio_profiles/$profile_name.profile"
+
+    # Enregistrer la date de création et la description
+    echo "Date: $(date '+%Y-%m-%d %H:%M:%S')" > "$profile_file"
+    echo "Description: $description" >> "$profile_file"
+    
+    # Enregistrer la configuration du profil (ajouter les informations du périphérique combiné)
+    echo "Configuration:" >> "$profile_file"
+    echo "pactl load-module module-combine-sink sink_name=$profile_name" >> "$profile_file"
+
+    dialog --msgbox "Profil '$profile_name' sauvegardé avec succès." 10 40
+}
+
+# Fonction pour gérer les profils (chargement et suppression avec métadonnées)
+manage_profiles() {
+    if [ ! -d "$HOME/.combine_audio_profiles" ]; then
+        mkdir -p "$HOME/.combine_audio_profiles"
+    fi
+
+    profiles=$(ls "$HOME/.combine_audio_profiles")
     if [ -z "$profiles" ]; then
         dialog --msgbox "Aucun profil trouvé." 10 40
         return
@@ -130,23 +145,24 @@ manage_profiles() {
 
     profile_action=$(dialog --menu "Que souhaitez-vous faire ?" 15 60 3 \
     1 "Charger un profil" \
-    2 "Supprimer un profil" 2>&1 >/dev/tty)
+    2 "Supprimer des profils" 2>&1 >/dev/tty)
 
     case $profile_action in
         1)
-            profile_to_load=$(dialog --menu "Sélectionnez un profil à charger" 15 60 8 $profiles 2>&1 >/dev/tty)
-            if [ -n "$profile_to_load" ]; then
-                selected_profile=$(sed -n "${profile_to_load}p" "$profiles_file")
-                eval "$selected_profile"
-                dialog --msgbox "Profil chargé avec succès." 10 40
+            selected_profile=$(dialog --menu "Sélectionnez un profil à charger" 15 60 8 $profiles 2>&1 >/dev/tty)
+            if [ -n "$selected_profile" ]; then
+                profile_file="$HOME/.combine_audio_profiles/$selected_profile.profile"
+                source "$profile_file"
+                dialog --msgbox "Profil '$selected_profile' chargé avec succès." 10 40
             fi
             ;;
         2)
-            profile_to_delete=$(dialog --menu "Sélectionnez un profil à supprimer" 15 60 8 $profiles 2>&1 >/dev/tty)
-            if [ -n "$profile_to_delete" ]; then
-                # Supprimer le profil sélectionné
-                sed -i "${profile_to_delete}d" "$profiles_file"
-                dialog --msgbox "Profil supprimé avec succès." 10 40
+            selected_profiles=$(dialog --checklist "Sélectionnez les profils à supprimer (ESPACE pour sélectionner)" 15 60 8 $profiles 2>&1 >/dev/tty)
+            if [ -n "$selected_profiles" ]; then
+                for profile in $selected_profiles; do
+                    rm "$HOME/.combine_audio_profiles/$profile.profile"
+                done
+                dialog --msgbox "Les profils sélectionnés ont été supprimés." 10 40
             fi
             ;;
         *)
@@ -154,7 +170,6 @@ manage_profiles() {
             ;;
     esac
 }
-
 
 # Fonction d'aide dynamique
 display_help() {
@@ -181,7 +196,6 @@ update_script() {
     fi
 }
 
-
 # Sauvegarde automatique à la fermeture
 trap save_profile EXIT
 
@@ -207,3 +221,4 @@ while true; do
         *) clear; exit 0 ;;
     esac
 done
+
