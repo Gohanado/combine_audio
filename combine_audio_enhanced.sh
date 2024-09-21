@@ -58,7 +58,7 @@ create_combined() {
         selected_sinks+=("$sink")
     done
 
-    if [ ${#selected_sinks[@]} -lt 2 ]; then
+    if [ ${#selected_sinks[@]} -lt 2 ]; alors
         dialog --msgbox "Vous devez sélectionner au moins deux haut-parleurs." 10 40
         clear
         return
@@ -66,11 +66,11 @@ create_combined() {
 
     while true; do
         combined_name=$(dialog --inputbox "Entrez un nom pour le périphérique combiné (par défaut: 'combined')" 10 40 2>&1 >/dev/tty)
-        if [ -z "$combined_name" ]; then
+        if [ -z "$combined_name" ]; alors
             combined_name="combined"
         fi
 
-        if pactl list modules | grep "$combined_name" > /dev/null; then
+        if pactl list modules | grep "$combined_name" > /dev/null; alors
             dialog --msgbox "Erreur : un périphérique combiné avec ce nom existe déjà. Réessayez." 10 40
         else
             break
@@ -99,7 +99,7 @@ create_combined_mic() {
 
     choices=$(dialog --checklist "Sélectionnez les micros à combiner (ESPACE pour sélectionner)" 15 60 8 "${source_options[@]}" 2>&1 >/dev/tty)
 
-    if [ -z "$choices" ]; then
+    if [ -z "$choices" ]; alors
         dialog --msgbox "Aucun micro sélectionné. Annulation." 10 40
         clear
         return
@@ -111,7 +111,7 @@ create_combined_mic() {
         selected_sources+=("$source")
     done
 
-    if [ ${#selected_sources[@]} -lt 2 ]; then
+    if [ ${#selected_sources[@]} -lt 2 ]; alors
         dialog --msgbox "Vous devez sélectionner au moins deux micros." 10 40
         clear
         return
@@ -119,11 +119,11 @@ create_combined_mic() {
 
     while true; do
         combined_name=$(dialog --inputbox "Entrez un nom pour le périphérique combiné de micros (par défaut: 'combined_mic')" 10 40 2>&1 >/dev/tty)
-        if [ -z "$combined_name" ]; then
+        if [ -z "$combined_name" ]; alors
             combined_name="combined_mic"
         fi
 
-        if pactl list modules | grep "$combined_name" > /dev/null; then
+        if pactl list modules | grep "$combined_name" > /dev/null; alors
             dialog --msgbox "Erreur : un périphérique combiné avec ce nom existe déjà. Réessayez." 10 40
         else
             break
@@ -143,7 +143,7 @@ create_combined_mic() {
 purge_combined() {
     combined_sinks=$(pactl list short modules | grep module-combine-sink)
 
-    if [ -z "$combined_sinks" ]; then
+    if [ -z "$combined_sinks" ]; alors
         dialog --msgbox "Aucun périphérique combiné trouvé." 10 40
         clear
         return
@@ -158,7 +158,7 @@ purge_combined() {
 
     module_to_delete=$(dialog --menu "Sélectionnez le périphérique combiné à supprimer" 15 60 8 "${combined_list[@]}" 2>&1 >/dev/tty)
 
-    if [ -n "$module_to_delete" ]; then
+    if [ -n "$module_to_delete" ]; alors
         pactl unload-module "$module_to_delete"
         log_action "Périphérique combiné supprimé : $module_to_delete"
         notify_user "Périphérique combiné supprimé : $module_to_delete"
@@ -170,7 +170,7 @@ purge_combined() {
 purge_combined_mic() {
     combined_sources=$(pactl list short modules | grep module-combine-source)
 
-    if [ -z "$combined_sources" ]; then
+    if [ -z "$combined_sources" ]; alors
         dialog --msgbox "Aucun micro combiné trouvé." 10 40
         clear
         return
@@ -185,7 +185,7 @@ purge_combined_mic() {
 
     module_to_delete=$(dialog --menu "Sélectionnez le micro combiné à supprimer" 15 60 8 "${combined_list[@]}" 2>&1 >/dev/tty)
 
-    if [ -n "$module_to_delete" ]; then
+    if [ -n "$module_to_delete" ]; alors
         pactl unload-module "$module_to_delete"
         log_action "Micro combiné supprimé : $module_to_delete"
         notify_user "Micro combiné supprimé : $module_to_delete"
@@ -196,7 +196,7 @@ purge_combined_mic() {
 # Fonction pour sauvegarder un profil avec métadonnées
 save_profile() {
     profile_name=$(dialog --inputbox "Entrez le nom du profil à sauvegarder" 10 40 2>&1 >/dev/tty)
-    if [ -z "$profile_name" ]; then
+    if [ -z "$profile_name" ]; alors
         dialog --msgbox "Le nom du profil ne peut pas être vide." 10 40
         return
     fi
@@ -262,12 +262,28 @@ manage_profiles() {
     esac
 }
 
-# Fonction d'aide dynamique
+# Sauvegarde du profil à la fermeture (avec choix)
+trap 'ask_save_profile' EXIT
+
+ask_save_profile() {
+    dialog --yesno "Voulez-vous sauvegarder votre profil avant de quitter ?" 10 40
+    if [ $? -eq 0 ]; then
+        save_profile
+    else
+        dialog --msgbox "Fermeture sans sauvegarde." 10 40
+    fi
+}
+
+# Fonction d'aide dynamique complète
 display_help() {
     dialog --msgbox "Instructions d'utilisation :
-    - Créer un périphérique combiné : Combine plusieurs périphériques audio en un seul.
-    - Supprimer un périphérique combiné : Supprime un périphérique combiné existant.
-    - Gérer les profils : Sauvegarde et charge des profils de périphériques combinés." 15 60
+    - Créer un périphérique combiné (Haut-parleurs) : Combine plusieurs périphériques de sortie audio (haut-parleurs) en un seul.
+    - Créer un périphérique combiné (Micros) : Combine plusieurs périphériques de capture audio (micros) en un seul.
+    - Supprimer un périphérique combiné : Permet de supprimer un périphérique combiné existant, qu'il soit micro ou haut-parleurs.
+    - Gérer les profils : Sauvegarde et charge des profils de périphériques combinés.
+    - Sauvegarder un profil : Enregistre la configuration actuelle des périphériques combinés dans un profil pour une utilisation ultérieure.
+    - Mettre à jour le script : Télécharge la dernière version du script depuis GitHub.
+    - Quitter : Sortir du programme. Une option de sauvegarde du profil est proposée avant de quitter." 20 60
 }
 
 # Fonction de mise à jour du script via curl
@@ -284,9 +300,6 @@ update_script() {
         dialog --msgbox "Échec de la mise à jour. Impossible de télécharger le fichier." 10 40
     fi
 }
-
-# Sauvegarde automatique à la fermeture
-trap save_profile EXIT
 
 # Menu principal
 while true; do
@@ -314,4 +327,3 @@ while true; do
         *) clear; exit 0 ;;
     esac
 done
-
