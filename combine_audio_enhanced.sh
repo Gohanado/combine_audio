@@ -164,13 +164,23 @@ display_help() {
     - Gérer les profils : Sauvegarde et charge des profils de périphériques combinés." 15 60
 }
 
-# Fonction de mise à jour du script
+# Fonction de mise à jour du script via curl
 update_script() {
-    dialog --msgbox "Mise à jour du script depuis GitHub..." 10 40
-    git pull
-    chmod +x combine_audio_enhanced.sh
-    dialog --msgbox "Mise à jour terminée !" 10 40
+    dialog --msgbox "Téléchargement de la dernière version du script depuis GitHub..." 10 40
+    
+    # Utilisation de curl pour télécharger la dernière version du script
+    curl -o combine_audio_enhanced.sh https://raw.githubusercontent.com/Gohanado/combine_audio/main/combine_audio_enhanced.sh
+
+    if [ $? -eq 0 ]; then
+        # Si le téléchargement a réussi
+        chmod +x combine_audio_enhanced.sh
+        dialog --msgbox "Mise à jour terminée avec succès." 10 40
+    else
+        # Si une erreur s'est produite
+        dialog --msgbox "Échec de la mise à jour. Impossible de télécharger le fichier." 10 40
+    fi
 }
+
 
 # Sauvegarde automatique à la fermeture
 trap save_profile EXIT
