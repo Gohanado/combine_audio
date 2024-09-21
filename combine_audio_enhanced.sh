@@ -141,7 +141,7 @@ create_combined_mic() {
 
 # Fonction pour supprimer un périphérique combiné (haut-parleurs)
 purge_combined() {
-    combined_sinks=$(pactl list short modules | grep module-combine-sink)
+    combined_sinks=$(pactl list short modules | grep -oP 'module-combine-sink.*sink_name=\K\S+')
 
     if [ -z "$combined_sinks" ]; then
         dialog --msgbox "Aucun périphérique combiné trouvé." 10 40
@@ -168,7 +168,7 @@ purge_combined() {
 
 # Fonction pour supprimer un micro combiné
 purge_combined_mic() {
-    combined_sources=$(pactl list short modules | grep module-combine-source)
+    combined_sources=$(pactl list short modules | grep -oP 'module-combine-source.*sink_name=\K\S+')
 
     if [ -z "$combined_sources" ]; then
         dialog --msgbox "Aucun micro combiné trouvé." 10 40
@@ -277,13 +277,32 @@ ask_save_profile() {
 # Fonction d'aide dynamique complète
 display_help() {
     dialog --msgbox "Instructions d'utilisation :
-    - Créer un périphérique combiné (Haut-parleurs) : Combine plusieurs périphériques de sortie audio (haut-parleurs) en un seul.
-    - Créer un périphérique combiné (Micros) : Combine plusieurs périphériques de capture audio (micros) en un seul.
-    - Supprimer un périphérique combiné : Permet de supprimer un périphérique combiné existant, qu'il soit micro ou haut-parleurs.
-    - Gérer les profils : Sauvegarde et charge des profils de périphériques combinés.
-    - Sauvegarder un profil : Enregistre la configuration actuelle des périphériques combinés dans un profil pour une utilisation ultérieure.
-    - Mettre à jour le script : Télécharge la dernière version du script depuis GitHub.
-    - Quitter : Sortir du programme. Une option de sauvegarde du profil est proposée avant de quitter." 20 60
+    --------------------------------------------------------
+    1. Créer un périphérique combiné (Haut-parleurs) :
+       Combine plusieurs périphériques de sortie audio 
+       (haut-parleurs) en un seul.
+    --------------------------------------------------------
+    2. Créer un périphérique combiné (Micros) :
+       Combine plusieurs périphériques de capture audio 
+       (micros) en un seul.
+    --------------------------------------------------------
+    3. Supprimer un périphérique combiné :
+       Permet de supprimer un périphérique combiné existant, 
+       qu'il soit micro ou haut-parleurs.
+    --------------------------------------------------------
+    4. Gérer les profils :
+       Sauvegarde et charge des profils de périphériques combinés.
+    --------------------------------------------------------
+    5. Sauvegarder un profil :
+       Enregistre la configuration actuelle des périphériques 
+       combinés dans un profil pour une utilisation ultérieure.
+    --------------------------------------------------------
+    6. Mettre à jour le script :
+       Télécharge la dernière version du script depuis GitHub.
+    --------------------------------------------------------
+    7. Quitter :
+       Sortir du programme. Une option de sauvegarde du profil 
+       est proposée avant de quitter." 20 70
 }
 
 # Fonction de mise à jour du script via curl
