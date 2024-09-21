@@ -152,7 +152,7 @@ purge_combined() {
     combined_list=()
     while read -r line; do
         module_id=$(echo "$line" | awk '{print $1}')
-        module_name=$(echo "$line" | awk '{print $2}')
+        module_name=$(echo "$line" | grep -oP "(?<=name=)[^,]+")
         combined_list+=("$module_id" "$module_name")
     done <<< "$combined_sinks"
 
@@ -166,7 +166,7 @@ purge_combined() {
     fi
 }
 
-# Fonction pour supprimer un périphérique combiné (micros)
+# Fonction pour supprimer un micro combiné
 purge_combined_mic() {
     combined_sources=$(pactl list short modules | grep module-combine-source)
 
@@ -179,7 +179,7 @@ purge_combined_mic() {
     combined_list=()
     while read -r line; do
         module_id=$(echo "$line" | awk '{print $1}')
-        module_name=$(echo "$line" | awk '{print $2}')
+        module_name=$(echo "$line" | grep -oP "(?<=name=)[^,]+")
         combined_list+=("$module_id" "$module_name")
     done <<< "$combined_sources"
 
@@ -218,7 +218,7 @@ manage_profiles() {
         mkdir -p "$HOME/.combine_audio_profiles"
     fi
 
-    profiles=$(ls "$HOME/.combine_audio_profiles")
+    profiles=$(ls "$HOME/.combine_audio_profiles" | grep '.profile$')
     if [ -z "$profiles" ]; then
         dialog --msgbox "Aucun profil trouvé." 10 40
         return
@@ -230,7 +230,12 @@ manage_profiles() {
 
     case $profile_action in
         1)
-            selected_profile=$(dialog --menu "Sélectionnez un profil à charger" 15 60 8 $profiles 2>&1 >/dev/tty)
+            profile_options=()
+            for profile in $profiles; do
+                profile_name=$(basename "$profile" .profile)
+                profile_options+=("$profile_name" "$profile_name")
+            done
+            selected_profile=$(dialog --menu "Sélectionnez un profil à charger" 15 60 8 "${profile_options[@]}" 2>&1 >/dev/tty)
             if [ -n "$selected_profile" ]; then
                 profile_file="$HOME/.combine_audio_profiles/$selected_profile.profile"
                 source "$profile_file"
@@ -238,7 +243,12 @@ manage_profiles() {
             fi
             ;;
         2)
-            selected_profiles=$(dialog --checklist "Sélectionnez les profils à supprimer (ESPACE pour sélectionner)" 15 60 8 $profiles 2>&1 >/dev/tty)
+            profile_options=()
+            for profile in $profiles; do
+                profile_name=$(basename "$profile" .profile)
+                profile_options+=("$profile_name" "$profile_name")
+            done
+            selected_profiles=$(dialog --checklist "Sélectionnez les profils à supprimer (ESPACE pour sélectionner)" 15 60 8 "${profile_options[@]}" 2>&1 >/dev/tty)
             if [ -n "$selected_profiles" ]; then
                 for profile in $selected_profiles; do
                     rm "$HOME/.combine_audio_profiles/$profile.profile"
