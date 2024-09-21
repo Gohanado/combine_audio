@@ -116,7 +116,7 @@ save_profile() {
     dialog --msgbox "Profil '$combined_name' sauvegardé avec succès." 10 40
 }
 
-# Fonction pour gérer les profils audio
+# Fonction pour gérer les profils audio (ajout de la suppression)
 manage_profiles() {
     if [ ! -f "$profiles_file" ]; then
         touch "$profiles_file"
@@ -128,13 +128,33 @@ manage_profiles() {
         return
     fi
 
-    profile_to_load=$(dialog --menu "Sélectionnez un profil à charger" 15 60 8 $profiles 2>&1 >/dev/tty)
-    if [ -n "$profile_to_load" ]; then
-        selected_profile=$(sed -n "${profile_to_load}p" "$profiles_file")
-        eval "$selected_profile"
-        dialog --msgbox "Profil chargé avec succès." 10 40
-    fi
+    profile_action=$(dialog --menu "Que souhaitez-vous faire ?" 15 60 3 \
+    1 "Charger un profil" \
+    2 "Supprimer un profil" 2>&1 >/dev/tty)
+
+    case $profile_action in
+        1)
+            profile_to_load=$(dialog --menu "Sélectionnez un profil à charger" 15 60 8 $profiles 2>&1 >/dev/tty)
+            if [ -n "$profile_to_load" ]; then
+                selected_profile=$(sed -n "${profile_to_load}p" "$profiles_file")
+                eval "$selected_profile"
+                dialog --msgbox "Profil chargé avec succès." 10 40
+            fi
+            ;;
+        2)
+            profile_to_delete=$(dialog --menu "Sélectionnez un profil à supprimer" 15 60 8 $profiles 2>&1 >/dev/tty)
+            if [ -n "$profile_to_delete" ]; then
+                # Supprimer le profil sélectionné
+                sed -i "${profile_to_delete}d" "$profiles_file"
+                dialog --msgbox "Profil supprimé avec succès." 10 40
+            fi
+            ;;
+        *)
+            dialog --msgbox "Action annulée." 10 40
+            ;;
+    esac
 }
+
 
 # Fonction d'aide dynamique
 display_help() {
