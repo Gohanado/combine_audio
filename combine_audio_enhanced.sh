@@ -2,12 +2,20 @@
 
 # Chemin du fichier de log
 log_file="/var/log/combine_audio.log"
-# Chemin pour stocker les profils audio
+# Chemin pour stocker les profils audio, distinct pour chaque utilisateur
 profiles_file="$HOME/.combine_audio_profiles"
 
 # Fonction pour journaliser les actions
 log_action() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> $log_file
+}
+
+# Vérifier si PulseAudio est actif
+check_pulseaudio() {
+    if ! pactl info > /dev/null 2>&1; then
+        dialog --msgbox "PulseAudio n'est pas actif. Veuillez le démarrer avant de continuer." 10 40
+        exit 1
+    fi
 }
 
 # Fonction pour envoyer une notification
@@ -17,19 +25,18 @@ notify_user() {
 
 # Fonction pour lister les périphériques audio disponibles
 get_audio_sinks() {
-    pactl list short sinks
+    pactl list short sinks | sort
 }
 
 # Fonction pour créer un périphérique combiné
 create_combined() {
-    # Lister tous les périphériques audio disponibles et créer des options pour dialog
     sinks=$(get_audio_sinks)
     sink_options=()
 
     while read -r line; do
         index=$(echo "$line" | awk '{print $1}')
         name=$(echo "$line" | awk '{print $2}')
-        sink_options+=("$index" "$name" "off") # Ajoute le nom du périphérique
+        sink_options+=("$index" "$name" "off")
     done <<< "$sinks"
 
     # Utiliser dialog pour afficher une liste et permettre la sélection
@@ -47,29 +54,27 @@ create_combined() {
         selected_sinks+=("$sink")
     done
 
-    # Vérification du nombre de périphériques
     if [ ${#selected_sinks[@]} -lt 2 ]; then
         dialog --msgbox "Vous devez sélectionner au moins deux périphériques." 10 40
         clear
         return
     fi
 
-    # Demander un nom pour le périphérique combiné
-    combined_name=$(dialog --inputbox "Entrez un nom pour le périphérique combiné (par défaut: 'combined')" 10 40 2>&1 >/dev/tty)
-    if [ -z "$combined_name" ]; then
-        combined_name="combined"
-    fi
+    while true; do
+        combined_name=$(dialog --inputbox "Entrez un nom pour le périphérique combiné (par défaut: 'combined')" 10 40 2>&1 >/dev/tty)
+        if [ -z "$combined_name" ]; then
+            combined_name="combined"
+        fi
 
-    # Vérifier si le nom existe déjà
-    if pactl list modules | grep "$combined_name" > /dev/null; then
-        dialog --msgbox "Erreur : un périphérique combiné avec ce nom existe déjà." 10 40
-        clear
-        return
-    fi
+        if pactl list modules | grep "$combined_name" > /dev/null; then
+            dialog --msgbox "Erreur : un périphérique combiné avec ce nom existe déjà. Réessayez." 10 40
+        else
+            break
+        fi
+    done
 
     combined_sinks=$(IFS=, ; echo "${selected_sinks[*]}")
 
-    # Créer le périphérique combiné
     pactl load-module module-combine-sink sink_name=$combined_name slaves=$combined_sinks
 
     log_action "Périphérique combiné créé : $combined_name avec ${combined_sinks[*]}"
@@ -104,7 +109,14 @@ purge_combined() {
     fi
 }
 
-# Fonction pour gérer les profils
+# Fonction pour sauvegarder un profil audio
+save_profile() {
+    combined_name=$(dialog --inputbox "Entrez le nom du profil à sauvegarder" 10 40 2>&1 >/dev/tty)
+    echo "pactl load-module module-combine-sink sink_name=$combined_name" >> "$profiles_file"
+    dialog --msgbox "Profil '$combined_name' sauvegardé avec succès." 10 40
+}
+
+# Fonction pour gérer les profils audio
 manage_profiles() {
     if [ ! -f "$profiles_file" ]; then
         touch "$profiles_file"
@@ -124,20 +136,24 @@ manage_profiles() {
     fi
 }
 
-# Fonction pour sauvegarder un profil
-save_profile() {
-    combined_name=$(dialog --inputbox "Entrez le nom du profil à sauvegarder" 10 40 2>&1 >/dev/tty)
-    echo "pactl load-module module-combine-sink sink_name=$combined_name" >> "$profiles_file"
-    dialog --msgbox "Profil '$combined_name' sauvegardé avec succès." 10 40
-}
-
-# Fonction pour afficher l'aide
+# Fonction d'aide dynamique
 display_help() {
     dialog --msgbox "Instructions d'utilisation :
     - Créer un périphérique combiné : Combine plusieurs périphériques audio en un seul.
     - Supprimer un périphérique combiné : Supprime un périphérique combiné existant.
     - Gérer les profils : Sauvegarde et charge des profils de périphériques combinés." 15 60
 }
+
+# Fonction de mise à jour du script
+update_script() {
+    dialog --msgbox "Mise à jour du script depuis GitHub..." 10 40
+    git pull
+    chmod +x combine_audio_enhanced.sh
+    dialog --msgbox "Mise à jour terminée !" 10 40
+}
+
+# Sauvegarde automatique à la fermeture
+trap save_profile EXIT
 
 # Menu principal
 while true; do
@@ -147,16 +163,17 @@ while true; do
     3 "Sauvegarder un profil" \
     4 "Gérer les profils audio" \
     5 "Afficher l'aide" \
-    6 "Quitter" 2>&1 >/dev/tty)
+    6 "Mise à jour du script" \
+    7 "Quitter" 2>&1 >/dev/tty)
 
     case $action in
-        1) create_combined ;;
+        1) check_pulseaudio; create_combined ;;
         2) purge_combined ;;
         3) save_profile ;;
         4) manage_profiles ;;
         5) display_help ;;
-        6) clear; exit 0 ;;
+        6) update_script ;;
+        7) clear; exit 0 ;;
         *) clear; exit 0 ;;
     esac
 done
-
